@@ -70,7 +70,6 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE imageHandle, EFI_SYSTEM_TABLE *systemTable
 		Print(L"Failed to start the Windows EFI boot loader: %r\n", status);
 		gBS->Stall(SEC_TO_MICRO(2));
 
-		UndoHooks();
 		gBS->UnloadImage(windows);
 		return status;
 	}
@@ -96,10 +95,6 @@ EFI_STATUS EFIAPI SetupHooks(EFI_HANDLE windows) {
 	}
 
 	ImgArchStartBootApplication = (IMG_ARCH_START_BOOT_APPLICATION)TrampolineHook((VOID *)ImgArchStartBootApplicationHook, func, ImgArchStartBootApplicationOriginal);
-
-	// Hook ExitBootServices
-	ExitBootServicesOriginal = gBS->ExitBootServices;
-	gBS->ExitBootServices = ExitBootServicesHook;
 
 	return EFI_SUCCESS;
 }
@@ -141,6 +136,10 @@ EFI_STATUS EFIAPI ImgArchStartBootApplicationHook(VOID *appEntry, VOID *imageBas
 	}
 
 	BlImgAllocateImageBuffer = (BL_IMG_ALLOCATE_IMAGE_BUFFER)TrampolineHook((VOID *)BlImgAllocateImageBufferHook, RELATIVE_ADDR(funcCall, 5), BlImgAllocateImageBufferOriginal);
+
+	// Hook ExitBootServices
+	ExitBootServicesOriginal = gBS->ExitBootServices;
+	gBS->ExitBootServices = ExitBootServicesHook;
 
 	return ImgArchStartBootApplication(appEntry, imageBase, imageSize, bootOption, returnArguments);
 }
@@ -316,12 +315,6 @@ EFI_STATUS EFIAPI ExitBootServicesHook(EFI_HANDLE imageHandle, UINTN mapKey) {
 
 	gBS->ExitBootServices = ExitBootServicesOriginal;
 	return gBS->ExitBootServices(imageHandle, mapKey);
-}
-
-// Called to undo the hook chain
-// Only called if the Windows bootloader failed to start, meaning only ExitBootServices matters
-VOID EFIAPI UndoHooks() {
-	gBS->ExitBootServices = ExitBootServicesOriginal;
 }
 
 // Locates the device path for the Windows bootloader

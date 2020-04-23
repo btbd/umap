@@ -28,5 +28,4 @@ EFI_STATUS EFIAPI SetupMapper(KLDR_DATA_TABLE_ENTRY *ntoskrnl);
 EFI_STATUS EFIAPI MapMapper(VOID *ntoskrnlBase, VOID **entryPoint, LIST_ENTRY *callbackList, BOOLEAN *callbacksEnabled);
 EFI_STATUS EFIAPI ExitBootServicesHook(EFI_HANDLE imageHandle, UINTN mapKey);
 
-VOID EFIAPI UndoHooks();
 EFI_DEVICE_PATH *EFIAPI GetWindowsDevicePath();

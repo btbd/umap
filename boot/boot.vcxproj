@@ -24,6 +24,7 @@
     <Link>
       <AdditionalDependencies>UefiApplicationEntryPoint.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>EFI Application</SubSystem>
+      <GenerateDebugInformation Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</GenerateDebugInformation>
     </Link>
     <ClCompile>
       <TreatWarningAsError Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</TreatWarningAsError>
