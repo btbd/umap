@@ -282,7 +282,7 @@ EFI_STATUS EFIAPI MapMapper(VOID *ntoskrnlBase, VOID **entryPoint, LIST_ENTRY *a
 			UINT16 *relocData = (UINT16 *)((UINT8 *)reloc + sizeof(IMAGE_BASE_RELOCATION));
 			UINT8 *relocBase = mapperBase + reloc->VirtualAddress;
 
-			for (UINT32 i = 0; i < relocCount; ++i) {
+			for (UINT32 i = 0; i < relocCount; ++i, ++relocData) {
 				UINT16 data = *relocData;
 				UINT16 type = data >> 12;
 				UINT16 offset = data & 0xFFF;
@@ -297,6 +297,7 @@ EFI_STATUS EFIAPI MapMapper(VOID *ntoskrnlBase, VOID **entryPoint, LIST_ENTRY *a
 			}
 
 			currentSize += reloc->SizeOfBlock;
+			reloc = (IMAGE_BASE_RELOCATION *)relocData;
 		}
 	}
 

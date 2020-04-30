@@ -136,7 +136,7 @@ NTSTATUS MapImage(PBYTE buffer, PCHAR error) {
 			PUSHORT relocData = (PUSHORT)((PBYTE)reloc + sizeof(IMAGE_BASE_RELOCATION));
 			PBYTE relocBase = base + reloc->VirtualAddress;
 
-			for (UINT32 i = 0; i < relocCount; ++i) {
+			for (UINT32 i = 0; i < relocCount; ++i, ++relocData) {
 				USHORT data = *relocData;
 				USHORT type = data >> 12;
 				USHORT offset = data & 0xFFF;
@@ -153,6 +153,7 @@ NTSTATUS MapImage(PBYTE buffer, PCHAR error) {
 			}
 
 			currentSize += reloc->SizeOfBlock;
+			reloc = (PIMAGE_BASE_RELOCATION)relocData;
 		}
 	}
 
