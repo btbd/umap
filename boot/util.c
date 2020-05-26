@@ -27,7 +27,9 @@ VOID *FindPattern(CHAR8 *base, UINTN size, CHAR8 *pattern, CHAR16 *mask) {
 }
 
 VOID *TrampolineHook(VOID *dest, VOID *src, UINT8 original[JMP_SIZE]) {
-	MemCopy(original, src, JMP_SIZE);
+	if (original) {
+		MemCopy(original, src, JMP_SIZE);
+	}
 
 	MemCopy(src, "\xFF\x25\x00\x00\x00\x00", 6);
 	*(VOID **)((UINT8 *)src + 6) = dest;

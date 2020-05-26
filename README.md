@@ -14,7 +14,7 @@ Windows UEFI bootkit that loads a generic driver manual mapper without using a U
 
 # Compiling
 
-The `mapper` and `umap` projects can both be compiled using standard Visual Studio (with WDK for `mapper`). Keep in mind that any changes to `mapper` must be updated in its corresponding bootkit resource. One could also just replace `mapper` with their own driver (make sure to have a nonce and undo the bootkit callback), which renders the usermode component irrelevant.
+The `mapper` and `umap` projects can both be compiled using standard Visual Studio (with WDK for `mapper`). Keep in mind that any changes to `mapper` must be updated in its corresponding bootkit resource. One could also just replace `mapper` with their own driver (make sure to undo the bootkit hook), which renders the usermode component irrelevant. By default, the mapper's `DriverEntry` is called before the boot-time driver `acpiex.sys` is initialized (typically the 2nd driver in the load order after WDF). This can be easily changed if needed.
 
 The bootkit by default expects an `edk2` directory in the repository's root with the EDK2 header and library files combined. You can use VisualUEFI for both of these, then simply combine the directories. Or, change the project layout to fit your UEFI development environment.
 

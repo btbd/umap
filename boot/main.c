@@ -171,7 +171,15 @@ EFI_STATUS EFIAPI OslFwpKernelSetupPhase1Hook(LOADER_PARAMETER_BLOCK *loaderPara
 	if (mapper.AllocatedBuffer) {
 		KLDR_DATA_TABLE_ENTRY *ntoskrnl = GetModuleEntry(&loaderParameterBlock->LoadOrderListHead, L"ntoskrnl.exe");
 		if (ntoskrnl) {
-			winload.ProtectedModeStatus = SetupMapper(ntoskrnl);
+			// The target module is the module whose DriverEntry we hook
+			// One can change this to load their driver (in this case the mapper) at different times in the boot process
+			KLDR_DATA_TABLE_ENTRY *targetModule = GetModuleEntry(&loaderParameterBlock->LoadOrderListHead, L"acpiex.sys");
+			if (targetModule) {
+				winload.ProtectedModeStatus = SetupMapper(ntoskrnl, targetModule);
+			} else {
+				winload.ProtectedModeStatus = EFI_NOT_FOUND;
+				winload.ProtectedModeError = L"Failed to find target module entry";
+			}
 		} else {
 			winload.ProtectedModeStatus = EFI_NOT_FOUND;
 			winload.ProtectedModeError = L"Failed to find ntoskrnl module entry";
@@ -185,48 +193,27 @@ EFI_STATUS EFIAPI OslFwpKernelSetupPhase1Hook(LOADER_PARAMETER_BLOCK *loaderPara
 }
 
 // Sets up the mapper (in protected mode)
-EFI_STATUS EFIAPI SetupMapper(KLDR_DATA_TABLE_ENTRY *ntoskrnl) {
-	// Locate AlpcpLogCallbackListHead to insert a custom callback
-	VOID *dataAccess = FindPattern(ntoskrnl->ImageBase, ntoskrnl->SizeOfImage, "\x48\x8B\x05\x00\x00\x00\x00\x48\x8D\x0D\x00\x00\x00\x00\xEB\x09", L"xxx????xxx????xx");
-	if (!dataAccess) {
-		winload.ProtectedModeError = L"Failed to find AlpcpLogCallbackListHead";
-		return EFI_NOT_FOUND;
-	}
-
-	LIST_ENTRY *alpcpLogCallbackListHead = RELATIVE_ADDR(dataAccess, 7);
-
-	// Locate AlpcpLogEnabled to enable ALPCP logging 
-	dataAccess = FindPattern(ntoskrnl->ImageBase, ntoskrnl->SizeOfImage, "\x80\x3D\x00\x00\x00\x00\x00\x48\x8B\x84\x24\x00\x00\x00\x00\x48\x8B\x8C\x24", L"xx?????xxxx????xxxx");
-	if (!dataAccess) {
-		winload.ProtectedModeError = L"Failed to find AlpcpLogEnabled";
-		return EFI_NOT_FOUND;
-	}
-
-	BOOLEAN *alpcpLogEnabled = ((BOOLEAN *)RELATIVE_ADDR(dataAccess, 6)) + 1;
-
+EFI_STATUS EFIAPI SetupMapper(KLDR_DATA_TABLE_ENTRY *ntoskrnl, KLDR_DATA_TABLE_ENTRY *targetModule) {
+	// Map the mapper
 	VOID *mapperEntryPoint;
-	EFI_STATUS status = MapMapper(ntoskrnl->ImageBase, &mapperEntryPoint, alpcpLogCallbackListHead, alpcpLogEnabled);
+	EFI_STATUS status = MapMapper(ntoskrnl->ImageBase, &mapperEntryPoint, targetModule->EntryPoint);
 	if (EFI_ERROR(status)) {
 		return status;
 	}
-
-	// Setup the custom callback entry
-	ALPCP_LIST_ENTRY *mapperListEntry = mapper.AllocatedBuffer;
-	mapperListEntry->Callback = mapperEntryPoint;
 	
-	// Insert the custom callback
-	InsertTailList(alpcpLogCallbackListHead, (LIST_ENTRY *)mapperListEntry);
-
-	// Enable logging
-	*alpcpLogEnabled = TRUE;
+	// This is necessary because on <1903 the kernel will remap boot-time drivers
+	// and recalculate their DriverEntry, so you cannot simply change the pointer
+	// or do a standard trampoline hook and store the pointer in mapper data
+	// as it will point to invalid memory after the kernel initializes
+	MemCopy(targetModule->EntryPoint, "\x4C\x8D\x05\xF9\xFF\xFF\xFF", 7); // lea r8, [rip - 7]
+	TrampolineHook(mapperEntryPoint, (UINT8 *)targetModule->EntryPoint + 7, NULL);
 
 	return EFI_SUCCESS;
 }
 
 // Maps the driver manual mapper (in protected mode)
-EFI_STATUS EFIAPI MapMapper(VOID *ntoskrnlBase, VOID **entryPoint, LIST_ENTRY *alpcpLogCallbackListHead, BOOLEAN *alpcpLogEnabled) {
-	// The start of the mapper's allocated buffer is used for its ALPCP entry
-	UINT8 *mapperBase = (UINT8 *)mapper.AllocatedBuffer + sizeof(ALPCP_LIST_ENTRY);
+EFI_STATUS EFIAPI MapMapper(VOID *ntoskrnlBase, VOID **entryPoint, VOID *targetFunction) {
+	UINT8 *mapperBase = mapper.AllocatedBuffer;
 	UINT8 *mapperBuffer = MAPPER_BUFFER;
 	
 	// No point in checking signature when it's controlled
@@ -241,10 +228,9 @@ EFI_STATUS EFIAPI MapMapper(VOID *ntoskrnlBase, VOID **entryPoint, LIST_ENTRY *a
 		IMAGE_SECTION_HEADER *section = &sections[i];
 		if (section->SizeOfRawData) {
 			// Fill in mapper data
-			UINT8 *mapperData = FindPattern(mapperBuffer + section->PointerToRawData, section->SizeOfRawData, "\x67\x89", L"xx");
+			UINT8 *mapperData = FindPattern(mapperBuffer + section->PointerToRawData, section->SizeOfRawData, "\x12\x34\x56\x78\x90", L"xxxxx");
 			if (mapperData) {
-				*(LIST_ENTRY **)&mapperData[sizeof(UINT16)] = alpcpLogCallbackListHead;
-				*(BOOLEAN **)&mapperData[sizeof(UINT16) + sizeof(LIST_ENTRY *)] = alpcpLogEnabled;
+				MemCopy(mapperData, targetFunction, MAPPER_DATA_SIZE);
 			}
 
 			MemCopy(mapperBase + section->VirtualAddress, mapperBuffer + section->PointerToRawData, section->SizeOfRawData);
@@ -287,12 +273,17 @@ EFI_STATUS EFIAPI MapMapper(VOID *ntoskrnlBase, VOID **entryPoint, LIST_ENTRY *a
 				UINT16 type = data >> 12;
 				UINT16 offset = data & 0xFFF;
 
-				if (type == IMAGE_REL_BASED_DIR64) {
-					UINT64 *rva = (UINT64 *)(relocBase + offset);
-					*rva = (UINT64)(mapperBase + (*rva - ntHeaders->OptionalHeader.ImageBase));
-				} else {
-					winload.ProtectedModeError = L"Unsupported relocation type";
-					return EFI_UNSUPPORTED;
+				switch (type) {
+					case IMAGE_REL_BASED_ABSOLUTE:
+						break;
+					case IMAGE_REL_BASED_DIR64: {
+						UINT64 *rva = (UINT64 *)(relocBase + offset);
+						*rva = (UINT64)(mapperBase + (*rva - ntHeaders->OptionalHeader.ImageBase));
+						break;
+					}
+					default:
+						winload.ProtectedModeError = L"Unsupported relocation type";
+						return EFI_UNSUPPORTED;
 				}
 			}
 

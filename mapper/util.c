@@ -113,3 +113,26 @@ ULONG64 GetExport(PBYTE base, PCHAR export) {
 
 	return 0;
 }
+
+BOOLEAN MemCopyWP(PVOID dest, PVOID src, ULONG length) {
+	PMDL mdl = IoAllocateMdl(dest, length, FALSE, FALSE, NULL);
+	if (!mdl) {
+		return FALSE;
+	}
+
+	MmProbeAndLockPages(mdl, KernelMode, IoModifyAccess);
+
+	PVOID mapped = MmMapLockedPagesSpecifyCache(mdl, KernelMode, MmNonCached, NULL, 0, HighPagePriority);
+	if (!mapped) {
+		MmUnlockPages(mdl);
+		IoFreeMdl(mdl);
+		return FALSE;
+	}
+
+	memcpy(mapped, src, length);
+
+	MmUnmapLockedPages(mapped, mdl);
+	MmUnlockPages(mdl);
+	IoFreeMdl(mdl);
+	return TRUE;
+}

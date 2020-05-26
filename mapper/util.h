@@ -1,12 +1,14 @@
 #pragma once
 
+#define JMP_SIZE (14)
 #define RELATIVE_ADDR(addr, size) ((PVOID)((PBYTE)(addr) + *(PINT)((PBYTE)(addr) + ((size) - (INT)sizeof(INT))) + (size)))
-#define printf(fmt, ...) DbgPrint("[dbg] "fmt, ##__VA_ARGS__)
+#define printf(fmt, ...) DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "[dbg] " fmt, ##__VA_ARGS__)
 
 BOOLEAN SafeCopy(PVOID dest, PVOID src, SIZE_T size);
 PVOID FindPatternImage(PCHAR base, PCHAR pattern, PCHAR mask);
 PVOID GetModuleBaseAddress(PCHAR name);
 ULONG64 GetExport(PBYTE base, PCHAR export);
+BOOLEAN MemCopyWP(PVOID dest, PVOID src, ULONG length);
 
 NTSYSCALLAPI NTSTATUS NTAPI ZwQuerySystemInformation(ULONG InfoClass, PVOID Buffer, ULONG Length, PULONG ReturnLength);
 NTKERNELAPI NTSTATUS NTAPI MmCopyVirtualMemory(PEPROCESS SourceProcess, PVOID SourceAddress, PEPROCESS TargetProcess, PVOID TargetAddress, SIZE_T BufferSize, KPROCESSOR_MODE PreviousMode, PSIZE_T ReturnSize);

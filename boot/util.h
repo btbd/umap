@@ -6,6 +6,7 @@
 
 #define JMP_SIZE (14)
 
+#define IMAGE_REL_BASED_ABSOLUTE (0)
 #define IMAGE_REL_BASED_DIR64 (10)
 #define IMAGE_NUMBEROF_DIRECTORY_ENTRIES (16)
 #define IMAGE_SIZEOF_SHORT_NAME (8)
@@ -48,11 +49,6 @@ typedef struct _LOADER_PARAMETER_BLOCK {
     UINT32 OsLoaderSecurityVersion;
     LIST_ENTRY LoadOrderListHead;
 } LOADER_PARAMETER_BLOCK;
-
-typedef struct _ALPCP_LIST_ENTRY {
-    LIST_ENTRY Entry;
-    VOID *Callback;
-} ALPCP_LIST_ENTRY;
 
 typedef struct _IMAGE_DOS_HEADER {      // DOS .EXE header
     UINT16 e_magic;                     // Magic number

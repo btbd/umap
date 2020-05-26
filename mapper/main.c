@@ -2,21 +2,13 @@
 
 INT64(*HalDispatchOriginal)(PVOID, PVOID);
 
-VOID Main() {
+VOID Main(PVOID func) {
 	// The bootkit mapper will fill this data
-	static volatile BYTE mapperData[sizeof(WORD) + sizeof(PLIST_ENTRY) + sizeof(PBOOLEAN)] = { 0x67, 0x89 };
+	static volatile BYTE mapperData[MAPPER_DATA_SIZE] = { 0x12, 0x34, 0x56, 0x78, 0x90 };
 
-	PLIST_ENTRY alpcpLogCallbackListHead = *(PLIST_ENTRY *)&mapperData[2];
-	PBOOLEAN alpcpLogEnabled = *(PBOOLEAN *)&mapperData[sizeof(WORD) + sizeof(PLIST_ENTRY)];
-
-	// Undo callback made by bootkit
-	if (alpcpLogEnabled) {
-		*alpcpLogEnabled = FALSE;
-	}
-
-	if (alpcpLogCallbackListHead) {
-		RemoveTailList(alpcpLogCallbackListHead);
-	}
+	// Undo hook by bootkit (no error checking because there's no reason it should fail
+	// and if it does fail then you can't recover)
+	MemCopyWP(func, (PVOID)mapperData, sizeof(mapperData));
 
 	// Simple .data function pointer hook
 	PVOID kernelBase = GetModuleBaseAddress("ntoskrnl.exe");
@@ -141,14 +133,19 @@ NTSTATUS MapImage(PBYTE buffer, PCHAR error) {
 				USHORT type = data >> 12;
 				USHORT offset = data & 0xFFF;
 
-				if (type == IMAGE_REL_BASED_DIR64) {
-					PULONG64 rva = (PULONG64)(relocBase + offset);
-					*rva = (ULONG64)(base + (*rva - ntHeaders->OptionalHeader.ImageBase));
-				} else {
-					sprintf(error, "Unsupported relocation type %d", type);
+				switch (type) {
+					case IMAGE_REL_BASED_ABSOLUTE:
+						break;
+					case IMAGE_REL_BASED_DIR64: {
+						PULONG64 rva = (PULONG64)(relocBase + offset);
+						*rva = (ULONG64)(base + (*rva - ntHeaders->OptionalHeader.ImageBase));
+						break;
+					}
+					default:
+						sprintf(error, "Unsupported relocation type %d", type);
 
-					ExFreePool(base);
-					return STATUS_NOT_SUPPORTED;
+						ExFreePool(base);
+						return STATUS_NOT_SUPPORTED;
 				}
 			}
 
@@ -160,15 +157,12 @@ NTSTATUS MapImage(PBYTE buffer, PCHAR error) {
 	return ((PDRIVER_INITIALIZE)(base + ntHeaders->OptionalHeader.AddressOfEntryPoint))((PDRIVER_OBJECT)base, NULL);
 }
 
-NTSTATUS DriverEntry(PDRIVER_OBJECT driver, PUNICODE_STRING registryPath) {
+// The third parameter is a pointer to the original DriverEntry that we inline hooked
+NTSTATUS DriverEntry(PDRIVER_OBJECT driver, PUNICODE_STRING registryPath, DRIVER_INITIALIZE func) {
 	UNREFERENCED_PARAMETER(driver);
 	UNREFERENCED_PARAMETER(registryPath);
 
-	static BOOLEAN once = TRUE;
-	if (once) {
-		once = FALSE;
-		Main();
-	}
+	Main((PVOID)func);
 
-	return STATUS_SUCCESS;
+	return func(driver, registryPath);
 }

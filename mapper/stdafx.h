@@ -14,5 +14,7 @@ typedef struct _IMAGE_DATA {
 	BYTE Buffer[1];
 } IMAGE_DATA, *PIMAGE_DATA;
 
+#define MAPPER_DATA_SIZE (JMP_SIZE + 7)
+
 INT64 HalDispatchHook(PIMAGE_DATA imageData, PINT64 status);
 NTSTATUS MapImage(PBYTE buffer, PCHAR error);
