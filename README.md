@@ -20,4 +20,4 @@ The bootkit by default expects an `edk2` directory in the repository's root with
 
 # Note
 
-This PoC was only tested on Windows 10 1803, 1809, 1903, and 1909.
+This PoC was only tested on Windows 10 1803, 1809, 1903, 1909, and 2004.
