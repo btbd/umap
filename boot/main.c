@@ -32,45 +32,54 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE imageHandle, EFI_SYSTEM_TABLE *systemTable
 	gST->ConOut->ClearScreen(gST->ConOut);
 	gST->ConOut->SetAttribute(gST->ConOut, EFI_WHITE | EFI_BACKGROUND_BLACK);
 
-	// Locate the Windows EFI bootloader
-	EFI_DEVICE_PATH *windowsPath = GetWindowsDevicePath();
-	if (!windowsPath) {
-		Print(L"Failed to find the Windows EFI bootloader\n");
+	// Locate the Windows EFI bootmgr
+	EFI_DEVICE_PATH *bootmgrPath = GetWindowsBootmgrDevicePath();
+	if (!bootmgrPath) {
+		Print(L"Failed to find the Windows EFI bootmgr\n");
 		gBS->Stall(SEC_TO_MICRO(2));
 
 		return EFI_NOT_FOUND;
 	}
 
-	// Load the Windows EFI bootloader
-	EFI_HANDLE windows;
-	EFI_STATUS status = gBS->LoadImage(TRUE, imageHandle, windowsPath, NULL, 0, &windows);
+	EFI_STATUS status = SetBootCurrent(bootmgrPath);
 	if (EFI_ERROR(status)) {
-		Print(L"Failed to load the Windows EFI boot loader: %r\n", status);
+		Print(L"Failed to set BootCurrent variable\n");
 		gBS->Stall(SEC_TO_MICRO(2));
 
-		gBS->FreePool(windowsPath);
+		FreePool(bootmgrPath);
 		return status;
 	}
 
-	gBS->FreePool(windowsPath);
+	// Load the Windows EFI bootmgr
+	EFI_HANDLE bootmgrHandle;
+	status = gBS->LoadImage(TRUE, imageHandle, bootmgrPath, NULL, 0, &bootmgrHandle);
+	if (EFI_ERROR(status)) {
+		Print(L"Failed to load the Windows EFI bootmgr: %r\n", status);
+		gBS->Stall(SEC_TO_MICRO(2));
+
+		FreePool(bootmgrPath);
+		return status;
+	}
+
+	FreePool(bootmgrPath);
 
 	// Setup the hook chain
-	status = SetupHooks(windows);
+	status = SetupHooks(bootmgrHandle);
 	if (EFI_ERROR(status)) {
 		Print(L"Failed to setup hooks: %r\n", status);
 		gBS->Stall(SEC_TO_MICRO(2));
 
-		gBS->UnloadImage(windows);
+		gBS->UnloadImage(bootmgrHandle);
 		return status;
 	}
 
-	// Start the Windows EFI bootloader
-	status = gBS->StartImage(windows, NULL, NULL);
+	// Start the Windows EFI bootmgr
+	status = gBS->StartImage(bootmgrHandle, NULL, NULL);
 	if (EFI_ERROR(status)) {
-		Print(L"Failed to start the Windows EFI boot loader: %r\n", status);
+		Print(L"Failed to start the Windows EFI bootmgr: %r\n", status);
 		gBS->Stall(SEC_TO_MICRO(2));
 
-		gBS->UnloadImage(windows);
+		gBS->UnloadImage(bootmgrHandle);
 		return status;
 	}
 
@@ -78,17 +87,17 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE imageHandle, EFI_SYSTEM_TABLE *systemTable
 }
 
 // Sets up the hook chain from bootmgr -> winload -> ntoskrnl
-EFI_STATUS EFIAPI SetupHooks(EFI_HANDLE windows) {
-	// Get the bootmgr image from the Windows bootloader handle
-	EFI_LOADED_IMAGE *currentImage;
-	EFI_STATUS status = gBS->HandleProtocol(windows, &gEfiLoadedImageProtocolGuid, (VOID **)&currentImage);
+EFI_STATUS EFIAPI SetupHooks(EFI_HANDLE bootmgrHandle) {
+	// Get the bootmgr image from the image handle
+	EFI_LOADED_IMAGE *bootmgr;
+	EFI_STATUS status = gBS->HandleProtocol(bootmgrHandle, &gEfiLoadedImageProtocolGuid, (VOID **)&bootmgr);
 	if (EFI_ERROR(status)) {
 		Print(L"Failed to get the boot manager image: %r\n", status);
 		return status;
 	}
 
 	// Hook ImgArchStartBootApplication to setup winload hooks
-	VOID *func = FindPattern(currentImage->ImageBase, currentImage->ImageSize, "\x48\x8B\xC4\x48\x89\x58\x20\x44\x89\x40\x18\x48\x89\x50\x10\x48\x89\x48\x08\x55\x56\x57\x41\x54", L"xxxxxxxxxxxxxxxxxxxxxxxx");
+	VOID *func = FindPattern(bootmgr->ImageBase, bootmgr->ImageSize, "\x48\x8B\xC4\x48\x89\x58\x20\x44\x89\x40\x18\x48\x89\x50\x10\x48\x89\x48\x08\x55\x56\x57\x41\x54", L"xxxxxxxxxxxxxxxxxxxxxxxx");
 	if (!func) {
 		Print(L"Failed to find ImgArchStartBootApplication\n");
 		return EFI_NOT_FOUND;
@@ -309,10 +318,8 @@ EFI_STATUS EFIAPI ExitBootServicesHook(EFI_HANDLE imageHandle, UINTN mapKey) {
 	return gBS->ExitBootServices(imageHandle, mapKey);
 }
 
-// Locates the device path for the Windows bootloader
-EFI_DEVICE_PATH *EFIAPI GetWindowsDevicePath() {
-	STATIC CHAR16 *windowsPath = L"\\efi\\microsoft\\boot\\bootmgfw.efi";
-
+// Locates the device path for the Windows bootmgr
+EFI_DEVICE_PATH *EFIAPI GetWindowsBootmgrDevicePath() {
 	UINTN handleCount;
 	EFI_HANDLE *handles;
 	EFI_DEVICE_PATH *devicePath = NULL;
@@ -324,7 +331,7 @@ EFI_DEVICE_PATH *EFIAPI GetWindowsDevicePath() {
 		return devicePath;
 	}
 
-	// Check each FS for the bootloader
+	// Check each FS for the bootmgr
 	for (UINTN i = 0; i < handleCount && !devicePath; ++i) {
 		EFI_FILE_IO_INTERFACE *fileSystem;
 		status = gBS->OpenProtocol(handles[i], &gEfiSimpleFileSystemProtocolGuid, (VOID **)&fileSystem, gImageHandle, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
@@ -336,11 +343,11 @@ EFI_DEVICE_PATH *EFIAPI GetWindowsDevicePath() {
 		status = fileSystem->OpenVolume(fileSystem, &volume);
 		if (!EFI_ERROR(status)) {
 			EFI_FILE_HANDLE file;
-			status = volume->Open(volume, &file, windowsPath, EFI_FILE_MODE_READ, EFI_FILE_READ_ONLY);
+			status = volume->Open(volume, &file, WINDOWS_BOOTMGR_PATH, EFI_FILE_MODE_READ, EFI_FILE_READ_ONLY);
 			if (!EFI_ERROR(status)) {
 				volume->Close(file);
 
-				devicePath = FileDevicePath(handles[i], windowsPath);
+				devicePath = FileDevicePath(handles[i], WINDOWS_BOOTMGR_PATH);
 			}
 		}
 
@@ -349,6 +356,90 @@ EFI_DEVICE_PATH *EFIAPI GetWindowsDevicePath() {
 
 	gBS->FreePool(handles);
 	return devicePath;
+}
+
+// Sets boot current to the option with the device path
+EFI_STATUS EFIAPI SetBootCurrent(EFI_DEVICE_PATH *path) {
+	// Query boot order array
+	UINTN bootOrderSize = 0;
+	EFI_STATUS status = gRT->GetVariable(EFI_BOOT_ORDER_VARIABLE_NAME, &gEfiGlobalVariableGuid, NULL, &bootOrderSize, NULL);
+	if (status != EFI_BUFFER_TOO_SMALL) {
+		return status;
+	}
+
+	UINT16 *bootOrder = AllocatePool(bootOrderSize);
+	if (!bootOrder) {
+		return EFI_OUT_OF_RESOURCES;
+	}
+
+	status = gRT->GetVariable(EFI_BOOT_ORDER_VARIABLE_NAME, &gEfiGlobalVariableGuid, NULL, &bootOrderSize, bootOrder);
+	if (EFI_ERROR(status)) {
+		FreePool(bootOrder);
+		return status;
+	}
+
+	// Try each boot option to find Windows boot manager
+	BOOLEAN found = FALSE;
+	for (UINTN i = 0; i < bootOrderSize / sizeof(bootOrder[0]) && !found; ++i) {
+		CHAR16 variableName[0xFF];
+		UnicodeSPrint(variableName, sizeof(variableName), L"Boot%04x", bootOrder[i]);
+		
+		UINTN bufferSize = 0;
+		status = gRT->GetVariable(variableName, &gEfiGlobalVariableGuid, NULL, &bufferSize, NULL);
+		if (status != EFI_BUFFER_TOO_SMALL) {
+			break;
+		}
+
+		UINT8 *buffer = AllocatePool(bufferSize);
+		if (!buffer) {
+			status = EFI_OUT_OF_RESOURCES;
+			break;
+		}
+
+		status = gRT->GetVariable(variableName, &gEfiGlobalVariableGuid, NULL, &bufferSize, buffer);
+		if (EFI_ERROR(status)) {
+			FreePool(buffer);
+			break;
+		}
+
+		// Check the option file path list
+		EFI_LOAD_OPTION *bootOption = (EFI_LOAD_OPTION *)buffer;
+		CHAR16 *bootOptionDescription = (CHAR16 *)(buffer + sizeof(EFI_LOAD_OPTION));
+		EFI_DEVICE_PATH_PROTOCOL *bootOptionPaths = (EFI_DEVICE_PATH_PROTOCOL *)(bootOptionDescription + StrLen(bootOptionDescription) + 1);
+
+		if (bootOption->FilePathListLength) {
+			// Only the first path is needed
+			CHAR16 *bootOptionPath = ConvertDevicePathToText(&bootOptionPaths[0], FALSE, TRUE);
+			if (bootOptionPath) {
+				// Conver it to lowercase
+				for (CHAR16 *c = bootOptionPath; *c; ++c) {
+					if (*c >= 'A' && *c <= 'Z') {
+						*c += ('a' - 'A');
+					}
+				}
+
+				// Check if it contains the bootmgr path
+				if (StrStr(bootOptionPath, WINDOWS_BOOTMGR_PATH)) {
+					status = gRT->SetVariable(EFI_BOOT_CURRENT_VARIABLE_NAME, &gEfiGlobalVariableGuid, EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS, sizeof(UINT16), &bootOrder[i]);
+					if (!EFI_ERROR(status)) {
+						found = TRUE;
+					}
+				}
+				
+				FreePool(bootOptionPath);
+			}
+		}
+
+		FreePool(buffer);
+	}
+
+	FreePool(bootOrder);
+
+	if (!EFI_ERROR(status) && !found) {
+		status = EFI_NOT_FOUND;
+	}
+
+	return status;
 }
 
 EFI_STATUS EFIAPI UefiUnload(EFI_HANDLE imageHandle) {
