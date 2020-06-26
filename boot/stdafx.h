@@ -34,4 +34,4 @@ EFI_STATUS EFIAPI MapMapper(VOID *ntoskrnlBase, VOID **entryPoint, VOID *targetF
 EFI_STATUS EFIAPI ExitBootServicesHook(EFI_HANDLE imageHandle, UINTN mapKey);
 
 EFI_DEVICE_PATH *EFIAPI GetWindowsBootmgrDevicePath();
-EFI_STATUS EFIAPI SetBootCurrent(EFI_HANDLE handle);
+EFI_STATUS EFIAPI SetBootCurrentToWindowsBootmgr();

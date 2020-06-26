@@ -41,9 +41,9 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE imageHandle, EFI_SYSTEM_TABLE *systemTable
 		return EFI_NOT_FOUND;
 	}
 
-	EFI_STATUS status = SetBootCurrent(bootmgrPath);
+	EFI_STATUS status = SetBootCurrentToWindowsBootmgr();
 	if (EFI_ERROR(status)) {
-		Print(L"Failed to set BootCurrent variable\n");
+		Print(L"Failed to set BootCurrent to Windows EFI bootmgr\n");
 		gBS->Stall(SEC_TO_MICRO(2));
 
 		FreePool(bootmgrPath);
@@ -229,7 +229,7 @@ EFI_STATUS EFIAPI MapMapper(VOID *ntoskrnlBase, VOID **entryPoint, VOID *targetF
 	IMAGE_NT_HEADERS64 *ntHeaders = (IMAGE_NT_HEADERS64 *)(mapperBuffer + ((IMAGE_DOS_HEADER *)mapperBuffer)->e_lfanew);
 
 	// Map headers
-	MemCopy(mapperBase, mapperBuffer, sizeof(ntHeaders->Signature) + sizeof(ntHeaders->FileHeader) + sizeof(ntHeaders->FileHeader.SizeOfOptionalHeader));
+	MemCopy(mapperBase, mapperBuffer, ntHeaders->OptionalHeader.SizeOfHeaders);
 
 	// Map sections
 	IMAGE_SECTION_HEADER *sections = (IMAGE_SECTION_HEADER *)((UINT8 *)&ntHeaders->OptionalHeader + ntHeaders->FileHeader.SizeOfOptionalHeader);
@@ -358,8 +358,8 @@ EFI_DEVICE_PATH *EFIAPI GetWindowsBootmgrDevicePath() {
 	return devicePath;
 }
 
-// Sets boot current to the option with the device path
-EFI_STATUS EFIAPI SetBootCurrent(EFI_DEVICE_PATH *path) {
+// Sets BootCurrent to Windows bootmgr option
+EFI_STATUS EFIAPI SetBootCurrentToWindowsBootmgr() {
 	// Query boot order array
 	UINTN bootOrderSize = 0;
 	EFI_STATUS status = gRT->GetVariable(EFI_BOOT_ORDER_VARIABLE_NAME, &gEfiGlobalVariableGuid, NULL, &bootOrderSize, NULL);
@@ -420,6 +420,7 @@ EFI_STATUS EFIAPI SetBootCurrent(EFI_DEVICE_PATH *path) {
 
 				// Check if it contains the bootmgr path
 				if (StrStr(bootOptionPath, WINDOWS_BOOTMGR_PATH)) {
+					// If so, update BootCurrent to this option
 					status = gRT->SetVariable(EFI_BOOT_CURRENT_VARIABLE_NAME, &gEfiGlobalVariableGuid, EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS, sizeof(UINT16), &bootOrder[i]);
 					if (!EFI_ERROR(status)) {
 						found = TRUE;

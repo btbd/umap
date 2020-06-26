@@ -74,7 +74,7 @@ NTSTATUS MapImage(PBYTE buffer, PCHAR error) {
 	}
 
 	// Map headers
-	memcpy(base, buffer, sizeof(ntHeaders->Signature) + sizeof(ntHeaders->FileHeader) + sizeof(ntHeaders->FileHeader.SizeOfOptionalHeader));
+	memcpy(base, buffer, ntHeaders->OptionalHeader.SizeOfHeaders);
 
 	// Map sections
 	PIMAGE_SECTION_HEADER sections = (PIMAGE_SECTION_HEADER)((PBYTE)&ntHeaders->OptionalHeader + ntHeaders->FileHeader.SizeOfOptionalHeader);

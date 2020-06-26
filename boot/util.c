@@ -72,13 +72,14 @@ UINT64 GetExport(UINT8 *base, CHAR8 *export) {
 		CHAR8 *func = (CHAR8 *)(base + nameRva[i]);
 		if (func) {
 			BOOLEAN equal = TRUE;
-
-			for (CHAR8 *c = export; *func && *c; ++func, ++c) {
+			for (CHAR8 *c = export; *c; ++func, ++c) {
 				if (*func != *c) {
 					equal = FALSE;
 					break;
 				}
 			}
+
+			equal &= !(*func);
 
 			if (equal) {
 				UINT32 *funcRva = (UINT32 *)(base + exports->AddressOfFunctions);
