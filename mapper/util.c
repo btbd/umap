@@ -103,7 +103,7 @@ ULONG64 GetExport(PBYTE base, PCHAR export) {
 
 	for (ULONG i = 0; i < exports->NumberOfNames; ++i) {
 		PCHAR func = (PCHAR)(base + nameRva[i]);
-		if (func && strcmp(func, export) == 0) {
+		if (strcmp(func, export) == 0) {
 			PULONG funcRva = (PULONG)(base + exports->AddressOfFunctions);
 			PWORD ordinalRva = (PWORD)(base + exports->AddressOfNameOrdinals);
 

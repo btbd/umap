@@ -70,23 +70,11 @@ UINT64 GetExport(UINT8 *base, CHAR8 *export) {
 
 	for (UINT32 i = 0; i < exports->NumberOfNames; ++i) {
 		CHAR8 *func = (CHAR8 *)(base + nameRva[i]);
-		if (func) {
-			BOOLEAN equal = TRUE;
-			for (CHAR8 *c = export; *c; ++func, ++c) {
-				if (*func != *c) {
-					equal = FALSE;
-					break;
-				}
-			}
+		if (AsciiStrCmp(func, export) == 0) {
+			UINT32 *funcRva = (UINT32 *)(base + exports->AddressOfFunctions);
+			UINT16 *ordinalRva = (UINT16 *)(base + exports->AddressOfNameOrdinals);
 
-			equal &= !(*func);
-
-			if (equal) {
-				UINT32 *funcRva = (UINT32 *)(base + exports->AddressOfFunctions);
-				UINT16 *ordinalRva = (UINT16 *)(base + exports->AddressOfNameOrdinals);
-
-				return (UINT64)base + funcRva[ordinalRva[i]];
-			}
+			return (UINT64)base + funcRva[ordinalRva[i]];
 		}
 	}
 

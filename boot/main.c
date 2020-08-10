@@ -411,7 +411,7 @@ EFI_STATUS EFIAPI SetBootCurrentToWindowsBootmgr() {
 			// Only the first path is needed
 			CHAR16 *bootOptionPath = ConvertDevicePathToText(&bootOptionPaths[0], FALSE, TRUE);
 			if (bootOptionPath) {
-				// Conver it to lowercase
+				// Convert it to lowercase
 				for (CHAR16 *c = bootOptionPath; *c; ++c) {
 					if (*c >= 'A' && *c <= 'Z') {
 						*c += ('a' - 'A');
