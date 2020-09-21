@@ -2,10 +2,10 @@
 
 INT64(*HalDispatchOriginal)(PVOID, PVOID);
 
-VOID Main(PVOID func) {
-	// The bootkit mapper will fill this data
-	static volatile BYTE mapperData[MAPPER_DATA_SIZE] = { 0x12, 0x34, 0x56, 0x78, 0x90 };
+// The bootkit mapper will fill this data
+__declspec(dllexport) volatile BYTE mapperData[MAPPER_DATA_SIZE];
 
+VOID Main(PVOID func) {
 	// Undo hook by bootkit (no error checking because there's no reason it should fail
 	// and if it does fail then you can't recover)
 	MemCopyWP(func, (PVOID)mapperData, sizeof(mapperData));

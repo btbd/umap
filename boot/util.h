@@ -15,11 +15,6 @@
 #define IMAGE_DIRECTORY_ENTRY_BASERELOC (5)
 #define IMAGE_DOS_SIGNATURE (0x5A4D)
 
-typedef enum _BL_ARCH_MODE {
-    BlProtectedMode = 0,
-    BlRealMode
-} BL_ARCH_MODE;
-
 #define BL_MEMORY_TYPE_APPLICATION (0xE0000012)
 #define BL_MEMORY_ATTRIBUTE_RWX (0x424000)
 
@@ -191,7 +186,7 @@ typedef struct _IMAGE_BASE_RELOCATION {
 } IMAGE_BASE_RELOCATION;
 
 VOID MemCopy(VOID *dest, VOID *src, UINTN size);
-VOID *FindPattern(CHAR8 *base, UINTN size, CHAR8 *pattern, CHAR16 *mask);
+VOID *FindPattern(CHAR8 *base, UINTN size, CHAR8 *pattern, CHAR8 *mask);
 VOID *TrampolineHook(VOID *dest, VOID *src, UINT8 original[JMP_SIZE]);
 VOID TrampolineUnHook(VOID *src, UINT8 original[JMP_SIZE]);
 KLDR_DATA_TABLE_ENTRY *GetModuleEntry(LIST_ENTRY *list, CHAR16 *name);
