@@ -108,7 +108,7 @@ EFI_STATUS EFIAPI SetupHooks(EFI_HANDLE bootmgrHandle) {
 
     // Hook ImgArchStartBootApplication to setup winload hooks
     VOID *func = FindPattern(bootmgr->ImageBase, bootmgr->ImageSize,
-        "\x48\x8B\xC4\x48\x89\x58\x20\x44\x89\x40\x18\x48"
+        "\x48\x8B\xC4\x48\x89\x58\x20\x44\x89\x40\x18\x4C" // Win11 23h2
         "\x89\x50\x10\x48\x89\x48\x08\x55\x56\x57\x41\x54",
         "xxxxxxxxxxxxxxxxxxxxxxxx");
 
